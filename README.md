@@ -31,7 +31,7 @@ On a row whose database is MySQL, the caption says `MySQL <version>`, and the me
 | Console (mysql) | `--console` | The client on the database, in a screen: `ddev mysql` on DDEV, the client in the database's container elsewhere |
 | Tables and sizes | `--tables` | The tables, largest first, with rows (MySQL's estimate) and size, in the modal. On MySQL 8 the session asks for the statistics as they are now (MySQL keeps them for a day otherwise) |
 | Export to the backups folder | `--export` | `<backups>/<folder>/<project>--mysql--<when>.sql.gz` |
-| Import a dump… | `--import <file>` | The dumps of the backups folder, this project's first; asks first; exports the database as it is, then empties it and imports |
+| Import a dump… | `--import <file>` | The dumps of the backups folder, this project's first; asks first; checks that the dump is whole, exports the database as it is, then empties it and imports |
 | Running statements | `--running` | What runs now, longest first; the slow statements the server counted; whether its slow query log is on |
 | Connection details | `--info` | Engine, version, runtime, service, database, user, size, and how a client on this machine connects |
 | Add Adminer, Add phpMyAdmin | `--admin adminer`, `--admin phpmyadmin` | DDEV: the official add-on (`ddev/ddev-adminer`, `ddev/ddev-phpmyadmin`), and a restart |
@@ -72,7 +72,7 @@ tablespaces (`--no-tablespaces`), which an application's user may not read.
 | Key | Default | What it is |
 | --- | --- | --- |
 | `admin` | `both` | The web admins the menu offers: `both`, `adminer`, `phpmyadmin` or `none` |
-| `keep` | `0` | How many exports of one project the backups folder keeps; the oldest go when a new one is made. `0` keeps every one |
+| `keep` | `0` | How many exports of one project the backups folder keeps; the oldest go when a new one is made, never the dump an import is reading. `0` keeps every one |
 
 ## Runtimes
 
