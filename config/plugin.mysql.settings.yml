@@ -1,0 +1,12 @@
+# MySQL — core/config/plugin.mysql.settings.yml
+#
+# The DATABASE menu of a project whose database is MySQL, and its tool, cmd-tools-mysql.sh.
+
+# The web admin the menu offers: both (Adminer and phpMyAdmin), adminer, phpmyadmin, or none. On DDEV each is the
+# official add-on, added to a project the first time it is asked for (and the project restarted). The other runtimes
+# cannot add a web admin to a project yet.
+admin: both
+
+# How many exports of one project the backups folder keeps: when a new one is made, the oldest go (the exports made
+# before an import among them). 0 keeps every one.
+keep: 0
