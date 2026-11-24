@@ -1,6 +1,6 @@
 {
   "name": "@webship.co/workspace-mysql",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "MySQL for Webship Workspace: the DATABASE menu on every project whose database is MySQL (a console in a screen, tables and sizes, an export into the backups folder, an import of a dump, the statements running now, the connection details, and Adminer and phpMyAdmin on DDEV), and its tool, cmd-tools-mysql.sh, on DDEV and on a compose file of the project's own. It carries its AI items, each placed in the workspace folder of its kind: an agent, a skill, a command and a prompt. An engine of @webship.co/workspace-database.",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
