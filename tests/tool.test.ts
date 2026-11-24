@@ -36,7 +36,8 @@ write('dev/nothing/README.md', '');
 
 /**
  * A shell with the plugin's functions, the two layer functions they ask (as the core's runtime layer answers them),
- * and `ddev`, `docker` and `date` recorded into $LOG. An export's recorder writes a small gzip, so the dump has content.
+ * and `ddev`, `docker` and `date` recorded into $LOG. An export's recorder writes a small gzip, so the dump has content;
+ * `docker` appends what it reads to $DOCKER_STDIN when that is set, so a test sees what the client was given.
  */
 function run(script: string, env: Record<string, string> = {}, opts: { layer?: boolean; ddevVersion?: string } = {}): { code: number; out: string; log: string[] } {
   const log = path.join(ROOT, `log-${Math.random().toString(36).slice(2)}`);
@@ -63,7 +64,7 @@ function ddev() {
     exec) [ -n "\${DDEV_EXEC_OUT:-}" ] && printf '%b' "\$DDEV_EXEC_OUT" ;;
   esac
   return 0 ; }
-function docker() { rec docker "\$@" ; [ -t 0 ] || cat > /dev/null ; [ -n "\${DOCKER_OUT:-}" ] && printf '%b' "\$DOCKER_OUT" ; return 0 ; }
+function docker() { rec docker "\$@" ; if [ -t 0 ] ; then : ; elif [ -n "\${DOCKER_STDIN:-}" ] ; then cat >> "\$DOCKER_STDIN" ; else cat > /dev/null ; fi ; [ -n "\${DOCKER_OUT:-}" ] && printf '%b' "\$DOCKER_OUT" ; return 0 ; }
 ${layer}
 source '${FUN}'
 WORKSPACE_ROOT='${ROOT}' ; doc_name=dev ; backups='${ROOT}/backups' ; current_path='${ROOT}'
@@ -139,6 +140,52 @@ test('an import exports the database as it is first, empties it off DDEV, and ta
   assert.match(own.log[0], /"\$c" "\$@" -e "DROP DATABASE IF EXISTS \\`\$d\\`; CREATE DATABASE \\`\$d\\`\$extra"$/);
   assert.match(own.log[1], /^docker compose -f compose\.yaml exec -T mysql sh -c .*exec "\$c" "\$@" "\$d"$/);
   assert.match(run(`PROJECT_NAME=shop ; IMPORT='${ROOT}/dev/shop/.ddev/config.yaml' ; mysql_tool`).out, /A MySQL dump is a \.sql or \.sql\.gz file/);
+});
+
+test('an import keeps its dump: keep: never prunes it, a dump that is not whole is refused before anything runs, and a read that fails fails the import', () => {
+  const dir = path.join(ROOT, 'backups', 'dev');
+  fs.mkdirSync(dir, { recursive: true });
+  const older = (name: string, body: Buffer, day: number) => {
+    const f = path.join(dir, name);
+    fs.writeFileSync(f, body);
+    const t = new Date(Date.UTC(2026, 0, day));
+    fs.utimesSync(f, t, t);
+    return f;
+  };
+  // keep: 1, and the project's own older export imported: the before-import export spares it, and the client gets
+  // all of it.
+  const old = older('own--mysql--2026-01-01-00-00-00.sql.gz', zlib.gzipSync('CREATE TABLE kept (id int);\n'), 1);
+  const fed = path.join(ROOT, 'fed-own.sql');
+  const kept = run(`PROJECT_NAME=own ; IMPORT='${old}' ; plugin_mysql_keep=1 ; DOCKER_OUT="-- MySQL dump\\nCREATE TABLE t (id int);\\n" ; DOCKER_STDIN='${fed}' ; mysql_tool`);
+  assert.strictEqual(kept.code, 0, kept.out);
+  assert.ok(fs.existsSync(old), 'the dump being imported is not pruned');
+  assert.doesNotMatch(kept.out, /Removed an older export \(keep: 1\): own--mysql--2026-01-01/);
+  assert.match(kept.out, /Imported own--mysql--2026-01-01-00-00-00\.sql\.gz\./);
+  assert.match(fs.readFileSync(fed, 'utf8'), /CREATE TABLE kept \(id int\);/, 'the client got the dump');
+  // The same on DDEV: import-db reads the dump, which is still there.
+  const shopOld = older('shop--mysql--2026-01-01-00-00-00.sql.gz', zlib.gzipSync('CREATE TABLE kept (id int);\n'), 1);
+  const ddev = run(`PROJECT_NAME=shop ; IMPORT='${shopOld}' ; plugin_mysql_keep=1 ; mysql_tool`);
+  assert.strictEqual(ddev.code, 0, ddev.out);
+  assert.ok(fs.existsSync(shopOld), 'the dump being imported is not pruned');
+  assert.strictEqual(ddev.log[ddev.log.length - 1], `ddev import-db --file=${shopOld}`);
+  // A dump that is not whole (the first half of one), or one with nothing in it: refused before anything runs.
+  const whole = zlib.gzipSync('INSERT INTO t VALUES (1);\n'.repeat(500));
+  const half = older('own--mysql--2026-01-02-00-00-00.sql.gz', whole.subarray(0, Math.floor(whole.length / 2)), 2);
+  const refused = run(`PROJECT_NAME=own ; IMPORT='${half}' ; plugin_mysql_keep=1 ; DOCKER_OUT="-- MySQL dump\\n" ; mysql_tool`);
+  assert.strictEqual(refused.code, 1, refused.out);
+  assert.match(refused.out, /own--mysql--2026-01-02-00-00-00\.sql\.gz is not a whole gzip file: nothing was imported\./);
+  assert.deepStrictEqual(refused.log, [], 'no export, no database dropped, no import');
+  assert.doesNotMatch(refused.out, /Imported/);
+  const empty = older('own--mysql--2026-01-03-00-00-00.sql.gz', zlib.gzipSync(''), 3);
+  assert.match(run(`PROJECT_NAME=own ; IMPORT='${empty}' ; mysql_tool`).out, /is empty: nothing was imported\./);
+  write('dumps/empty.sql', '');
+  assert.match(run(`PROJECT_NAME=shop ; IMPORT='${ROOT}/dumps/empty.sql' ; mysql_tool`).out, /empty\.sql is empty, or cannot be read: nothing was imported\./);
+  // A read that fails half-way (gunzip stops, after the check read the dump whole): the import fails, and says so.
+  const mark = path.join(ROOT, 'read-once');
+  const failed = run(`PROJECT_NAME=own ; IMPORT='${old}' ; NO_SAFETY_EXPORT=yes ; gunzip() { if [ "\$1" = -c ] && [ -e '${mark}' ] ; then echo 'gzip: unexpected end of file' >&2 ; return 1 ; fi ; : > '${mark}' ; command gunzip "\$@" ; } ; mysql_tool`);
+  assert.strictEqual(failed.code, 1, failed.out);
+  assert.match(failed.out, /The import failed: own--mysql--2026-01-01-00-00-00\.sql\.gz could not be read whole/);
+  assert.doesNotMatch(failed.out, /Imported/);
 });
 
 test('the console: DDEV\'s own client; docker compose for a file of its own', () => {

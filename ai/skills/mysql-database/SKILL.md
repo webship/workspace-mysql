@@ -28,7 +28,7 @@ section in the same menu, with that plugin installed.
 | Console (mysql) | `--console` | The client on the database: `ddev mysql` on DDEV; elsewhere the client in the database's container |
 | Tables and sizes | `--tables` (the modal reads `--tables --tsv`) | The tables, largest first, with rows (MySQL's estimate) and size. Reads only |
 | Export to the backups folder | `--export` | `<backups>/<folder>/<project>--mysql--<when>.sql.gz`, beside the dumps the row's own Export writes |
-| Import a dump… | `--import <file>` | Lists the dumps of the backups folder; asks first; exports the database as it is, then replaces it |
+| Import a dump… | `--import <file>` | Lists the dumps of the backups folder; asks first; checks that the dump is whole, exports the database as it is, then replaces it |
 | Running statements | `--running` | What runs now, longest first; the server's count of slow statements; whether the slow query log is on. Reads only |
 | Connection details | `--info` | Engine, version, runtime, service, database, user, size, and how a client on this machine connects |
 | Add Adminer, Add phpMyAdmin | `--admin adminer`, `--admin phpmyadmin` | DDEV only: the official add-on (ddev/ddev-adminer, ddev/ddev-phpmyadmin), and a restart |
@@ -65,7 +65,7 @@ does not stay.
 | Key | What it is |
 | --- | --- |
 | `admin:` | The web admins the menu offers: `both` (the default), `adminer`, `phpmyadmin`, or `none` |
-| `keep:` | How many exports of one project the backups folder keeps; the oldest go when a new one is made. `0` keeps every one |
+| `keep:` | How many exports of one project the backups folder keeps; the oldest go when a new one is made, never the dump an import is reading. `0` keeps every one |
 
 ## Good to know
 
